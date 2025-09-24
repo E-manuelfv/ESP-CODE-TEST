@@ -1,0 +1,113 @@
+/* Fill-in information from Blynk Device Info here */
+#define BLYNK_TEMPLATE_ID           "TMPL2P1uTSyyU"
+#define BLYNK_TEMPLATE_NAME         "Quickstart Device"
+#define BLYNK_AUTH_TOKEN            "4YoobksO6lbuj_tCtkJskbz2VyIyZ_lj"
+
+#define BLYNK_PRINT Serial
+
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
+// Definição dos pinos dos motores
+#define RightMotorSpeed 5
+#define RightMotorDir   0 
+#define LeftMotorSpeed  4
+#define LeftMotorDir    2
+
+// Configurações WiFi
+char auth[] = "4YoobksO6lbuj_tCtkJskbz2VyIyZ_lj";
+char ssid[] = "R2D2";
+char pass[] = "robot123";
+
+// Variáveis do joystick
+int eixoX = 0;   // Rotação (V5)
+int eixoY = 0;   // Frente/Trás (V6)
+
+BlynkTimer timer;
+
+// --- Função de movimento ---
+void moveControl(int x, int y) {
+  // Zona neutra -> parar
+  if (x == 0 && y == 0) {
+    analogWrite(RightMotorSpeed, 0);
+    analogWrite(LeftMotorSpeed, 0);
+    return;
+  }
+
+  // Converte para faixa PWM do ESP8266 (0–800)
+  int pwmY = map(abs(y), 0, 255, 0, 800);
+  int pwmX = map(abs(x), 0, 255, 0, 400);
+
+  // Se só tiver X (rotação pura)
+  if (y == 0 && x != 0) {
+    if (x > 0) { // girar para direita
+      digitalWrite(RightMotorDir, LOW);   // motor direito pra trás
+      digitalWrite(LeftMotorDir, HIGH);   // motor esquerdo pra frente
+    } else { // girar para esquerda
+      digitalWrite(RightMotorDir, HIGH);  
+      digitalWrite(LeftMotorDir, LOW);
+    }
+    analogWrite(RightMotorSpeed, pwmX);
+    analogWrite(LeftMotorSpeed, pwmX);
+    return;
+  }
+
+  // Direção frente ou trás
+  if (y > 0) {
+    digitalWrite(RightMotorDir, HIGH);
+    digitalWrite(LeftMotorDir, HIGH);
+  } else if (y < 0) {
+    digitalWrite(RightMotorDir, LOW);
+    digitalWrite(LeftMotorDir, LOW);
+  }
+
+  // Movimento combinado (Y + X) -> curvas
+  int rightPWM = pwmY;
+  int leftPWM  = pwmY;
+
+  if (x > 0) { // curva direita
+    rightPWM = max(0, pwmY - pwmX);
+  } else if (x < 0) { // curva esquerda
+    leftPWM = max(0, pwmY - pwmX);
+  }
+
+  analogWrite(RightMotorSpeed, rightPWM);
+  analogWrite(LeftMotorSpeed, leftPWM);
+}
+
+// --- Entrada do Blynk ---
+BLYNK_WRITE(V5) { // Rotação
+  eixoX = param.asInt();  
+  moveControl(eixoX, eixoY);
+}
+
+BLYNK_WRITE(V6) { // Frente/Trás
+  eixoY = param.asInt();  
+  moveControl(eixoX, eixoY);
+}
+
+BLYNK_CONNECTED() {
+  Serial.println("✅ Blynk conectado ao cloud!");
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(RightMotorSpeed, OUTPUT);
+  pinMode(LeftMotorSpeed, OUTPUT);
+  pinMode(RightMotorDir, OUTPUT);
+  pinMode(LeftMotorDir, OUTPUT);
+
+  // Inicia motores desligados
+  analogWrite(RightMotorSpeed, 0);
+  analogWrite(LeftMotorSpeed, 0);
+
+  // Conectar ao Blynk
+  Blynk.begin(auth, ssid, pass);
+  Serial.println("🤖 Sistema pronto! V5 (X) rotação, V6 (Y) frente/trás.");
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+}
